@@ -8,68 +8,97 @@ Created on Tue Jun 13 14:14:04 2023
 from fnmatch import fnmatch
 import os
 import torch
+import torch.nn as nn
 from torch.utils.data import Dataset
 import h5py
 import numpy as np
 import torchvision.transforms as transforms
-import random
 
 #%%
 
+class MinMaxChannelNormalization(nn.Module):
+    def __init__(self, max_vals=None):
+        super().__init__()
+        self.max_vals = max_vals
+
+    def forward(self, x):
+        # Use precomputed min and max if provided, else calculate
+        max_vals = self.max_vals
+
+
+        x_normalized = (x  / max_vals + 1e-12)
+        return x_normalized
+    
 class random_head_diffusion_loader(Dataset):
-    def __init__(self, total_h5_paths, healthy_h5_paths, split='train', split_ratio=0.7,
-                 transforms_A=None, transforms_B=None, if_aligned=False):
+    def __init__(self, total_h5_paths, healthy_h5_paths, loc_label_path,
+                 norm_values_tt=None, norm_values_tr=None, if_aligned=True):
 
 
-        # Load data keys from the .h5 files
-        # self.target_data = [(path, self._read_h5_keys(path)) for path in target_h5_paths]
-        self.total_data = {i: self._read_h5_keys(path) for i, path in enumerate(total_h5_paths)}
-        self.total_path_list = [path for path in total_h5_paths]
 
-        # self.healthy_data = [(path, self._read_h5_keys(path)) for path in healthy_h5_paths]
-        self.healthy_data = {i: self._read_h5_keys(path) for i, path in enumerate(healthy_h5_paths)}
-        self.healthy_path_list = [path for path in healthy_h5_paths]
-        
-        # self.total_target_samples = sum(len(keys) for _, keys in self.target_data)
-        self.total_total_samples = sum(len(self.total_data[key]) for key in self.total_data.keys())
-        # self.total_healthy_samples = sum(len(keys) for _, keys in self.healthy_data)
-        self.healthy_data_samples = sum(len(self.healthy_data[key]) for key in self.healthy_data.keys())
+        self.total_data = [(path, key) for path in total_h5_paths for key in self._read_h5_keys(path)]
+
+        self.healthy_data = [(path, key) for path in healthy_h5_paths for key in self._read_h5_keys(path)]
+        self.loc_label_path = loc_label_path
 
         self.if_aligned = if_aligned
-        self.transform_A = transforms.Compose(transforms_A) if transforms_A else None
-        self.transform_B = transforms.Compose(transforms_B) if transforms_B else None
+        if norm_values_tt is not None and norm_values_tr is not None:
+            self.norm_values_tt = norm_values_tt
+            self.norm_values_tr = norm_values_tr
+        else:
+            self.norm_values_tt, self.norm_values_tr = self._read_min_max(self.total_data, self.healthy_data)
 
+        self.minMax_transform_tt = transforms.Compose([
+                                                    MinMaxChannelNormalization(self.norm_values_tt)
+                                                    # Add other transformations here if needed
+                                                ])
+        self.minMax_transform_tr = transforms.Compose([
+                                                    MinMaxChannelNormalization(self.norm_values_tr)
+                                                    # Add other transformations here if needed
+                                                ])
+        
     def _read_h5_keys(self, file_path):
         with h5py.File(file_path, 'r') as h5_file:
             return list(h5_file.keys())
 
+    def _read_min_max(self, total_data, healthy_data):
+        # Create an empty array to store the distinct min and max values
+        max_values_tt = np.full((256), -np.inf)
+        max_values_tr = np.full((256), -np.inf)
+        for path, key in total_data:
+            '''
+            new_path_str = str(path).replace("empty", "new_string")
+            '''
+            path_healty = str(path).replace("stroke", "empty")
+            with h5py.File(path, 'r') as h5_file, h5py.File(path_healty, 'r') as h5_healthy:
+                     
+                # Iterate over the dictionary keys to find min and max values
+                data_slice = np.abs(np.array(h5_file[key]).reshape(-1,256))  # Get the data corresponding to the key
+                max_slice = np.max(data_slice, axis=(1))  # Find max over 1st and 3rd dimensions
+                max_values_tt = np.maximum(max_values_tt, max_slice)  # Update max values
+    
+                # Iterate over the dictionary keys to find min and max values
+                data_slice = np.abs((np.array(h5_file[key])-np.array(h5_healthy[key])).reshape(-1,256))  # Get the data corresponding to the key
+                max_slice = np.max(data_slice, axis=(1))  # Find max over 1st and 3rd dimensions
+                max_values_tr = np.maximum(max_values_tr, max_slice)  # Update max values
+    
+        return torch.tensor(max_values_tt).unsqueeze(1), torch.tensor(max_values_tr).unsqueeze(1)
+
     def _get_item_from_files(self, data_list, index):
-        for file_path, keys in data_list:
-            if index < len(keys):
-                with h5py.File(file_path, 'r') as h5_file:
-                    item = np.array(h5_file[keys[index]])
-                return item
-            index -= len(keys)
-        raise IndexError("List index out of range")
         
-    def _get_item_direct(self, index):
-        num_samples_per_file = 2000  # Assuming each file has 2000 samples
-        file_index = index // num_samples_per_file
-        key_index = index % num_samples_per_file
-    
-        # Construct the file name based on the file index
-        # Assuming file names are like 'partition_1.h5', 'partition_2.h5', etc.
-        file_name = f"partition_{file_index + 1}.h5"
-        key_name = f"xxxx_{key_index:04d}"
-    
-        with h5py.File(f"{self.base_path}/{file_name}", 'r') as h5_file:
-            item = np.array(h5_file[key_name])
+        corr_h5_path = data_list[index][0] # data list are tuples in [[path_of_partition, keys_of_exp],..]
+        key_exp = data_list[index][1]
+        with h5py.File(corr_h5_path, 'r') as h5_file:
+            item = np.array(h5_file[key_exp])
         return item
     
+    def _get_loc_label(self, loc_label_path, key):
+        with h5py.File(loc_label_path, 'r') as h5_file:
+            loc_label = np.array(h5_file[key])
+        return loc_label
+    
     def __getitem__(self, index):
-        domain_target = self._get_item_from_files(self.target_data, index)
-        if self.transform_A:
-            domain_target = self.transform_A(torch.tensor(domain_target, dtype=torch.float32).unsqueeze(0))
+        domain_total = self._get_item_from_files(self.total_data, index)
+        domain_total = torch.tensor(domain_total, dtype=torch.float32).view(-1,256).unsqueeze(0)
 
         if self.if_aligned:
             domain_healthy = self._get_item_from_files(self.healthy_data, index)
@@ -77,10 +106,12 @@ class random_head_diffusion_loader(Dataset):
             random_healthy_idx = np.random.randint(0, self.total_healthy_samples)
             domain_healthy = self._get_item_from_files(self.healthy_data, random_healthy_idx)
 
-        if self.transform_B:
-            domain_healthy = self.transform_B(torch.tensor(domain_healthy, dtype=torch.float32).unsqueeze(0))
+        domain_healthy = torch.tensor(domain_healthy, dtype=torch.float32).view(-1,256).unsqueeze(0)
+        loc_label = self._get_loc_label(self.loc_label_path, self.total_data[index][1])
 
-        return {'A': domain_target, 'A_keys': index, 'B': domain_healthy, 'B_keys': random_healthy_idx if not self.if_aligned else index}
+        return {'tr': self.minMax_transform_tr(domain_total-domain_healthy), 'tr_keys': self.total_data[index][1],
+                'tt': self.minMax_transform_tt(domain_total), 'tt_keys': self.total_data[index][1],
+                'loc_label': loc_label}
 
     def __len__(self):
-        return max(self.total_target_samples, self.total_healthy_samples)
+        return len(self.total_data)

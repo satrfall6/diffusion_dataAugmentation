@@ -5,7 +5,9 @@ Created on Tue Feb 20 11:40:32 2024
 @author: User
 """
 import os 
+import random
 import numpy as np
+import h5py
 import torch
 from torch import optim
 from torchvision import datasets, transforms, utils
@@ -23,6 +25,9 @@ os.chdir(Path(__file__).parents[0])
 root_path = Path.cwd()
 print('*'*30,f'Working in {root_path}','*'*30,)
 print(root_path)
+
+from dataset import random_head_diffusion_loader
+
 
 model_techs_sub = '_cfg'
 
@@ -80,56 +85,65 @@ def save_loss(loss_list):
     plt.title('Training Loss Curve')
     plt.legend()
     plt.savefig(f'training_loss_curve{model_techs_sub}.png')
+
+
 #%% load dataset
-assert 0 < split_ratio < 1, "Split ratio must be between 0 and 1"
 dataset_path = root_path / '2D_simulation/data'
+if_random = True
+from dataset import random_head_diffusion_loader
+
 if if_random:
     total_h5_paths = [path \
-                 for path in list(Path(dataset_path).rglob(f"*random*.h5"))\
+                 for path in list(Path(dataset_path).rglob("*random*.h5"))\
                  if fnmatch(path.parts[-1], '*stroke*')
                  and not 'empty' in path.parts[-1]]
                  
 
     healthy_h5_paths = [path \
-                 for path in list(Path(dataset_path).rglob(f"*random*.h5"))\
+                 for path in list(Path(dataset_path).rglob("*random*.h5"))\
                  if fnmatch(path.parts[-1], '*empty*')
                  and not 'stroke' in path.parts[-1]]
+    loc_label_path = dataset_path / 'location_class_random.h5'
 else:
     total_h5_paths = [path \
-                 for path in list(Path(dataset_path).rglob(f"*fixed*.h5"))\
+                 for path in list(Path(dataset_path).rglob("*fixed*.h5"))\
                  if fnmatch(path.parts[-1], '*stroke*')
                  and not 'empty' in path.parts[-1]]
                  
 
     healthy_h5_paths = [path \
-                 for path in list(Path(dataset_path).rglob(f"*fixed*.h5"))\
+                 for path in list(Path(dataset_path).rglob("*fixed*.h5"))\
                  if fnmatch(path.parts[-1], '*empty*')
                  and not 'stroke' in path.parts[-1]]
+    loc_label_path = dataset_path / 'location_class_fixed.h5'
 # Shuffle and split file paths
+shuffle_seed = 1253
+random.seed(shuffle_seed)
 random.shuffle(total_h5_paths)
+random.seed(shuffle_seed)
 random.shuffle(healthy_h5_paths)
-num_train_target = int(len(total_h5_paths) * split_ratio)
-num_train_healthy = int(len(healthy_h5_paths) * split_ratio)
+#%%
+split_ratio = 0.7
+num_train= int(len(total_h5_paths) * split_ratio)
 
 
-train_total_paths = total_h5_paths[:num_train_target]
-train_healthy_paths = healthy_h5_paths[:num_train_healthy]
+train_total_paths = total_h5_paths[:num_train]
+train_healthy_paths = healthy_h5_paths[:num_train]
 
-test_total_paths = total_h5_paths[num_train_target:]
-test_healthy_paths = healthy_h5_paths[num_train_healthy:]
+test_total_paths = total_h5_paths[num_train:]
+test_healthy_paths = healthy_h5_paths[num_train:]
 
-transform = transforms.Compose([
-    # transforms.Resize(64),  # Resize to match model input
-    transforms.ToTensor(),
-    transforms.Normalize([0.5], [0.5]),
-    # transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))
-])
-train_dataset = SParamsH5DatasetCycleGAN(train_file_paths, ...)
-test_dataset = SParamsH5DatasetCycleGAN(test_file_paths, ...)
-train_loader = DataLoader(train_dataset, batch_size=opt.batchSize, shuffle=True)
-test_loader = DataLoader(test_dataset, batch_size=opt.batchSize, shuffle=True)
-# train_dataset = datasets.CIFAR10(root='./data', train=True, download=False, transform=transform)
-# train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+
+train_dataset = random_head_diffusion_loader(train_total_paths, train_healthy_paths, loc_label_path)
+test_dataset = random_head_diffusion_loader(test_total_paths, test_healthy_paths, loc_label_path,
+                                            train_dataset.norm_values_tt, train_dataset.norm_values_tr)
+train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=1, shuffle=True)
+#%%
+
+for batch in train_loader:
+    break
+
 #%%
 num_classes = 10
 model = Unet(

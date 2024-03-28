@@ -471,182 +471,182 @@ def create_layered_shape_with_fixed_ellipse(**kwargs):
     stroke_location = cv2.resize(stroke_location, (256,256))
     return mask_per, mask_con, empty_mask_per, empty_mask_con, boundary, stroke_location
 
-
-if_random = False
-if not if_random:
-    fixed = '_fixed' # ['', '_fixed']
-else:
-    fixed = '_random'
-
-brain_gap_factor = 1 # this factor set to 1 means no grey between white matter and skull
-brain_shift_factor = 1 # set to 1 means brain no shift within skull
-shape_1_size, shape_0_size = 8, 8
-# Step 1: Define independent parameters
-fixed_parameters = {
-    'num_layers': 2,
-    'max_shift': [4 if if_random else 0 for i in range(1)][0],  # Maximum shift within the fixed ellipse
-    'angle_range': [(-3,3) if if_random else (0,0) for i in range(1)][0],
-    'shape': (512, 512),
-    'center': (256, 256),
-    'fixed_ellipse_axes': (90, 105),
-    'filled_liquid_di': (40, 0.1),
-    'scalp_di': (40.9,0.9),
-    'skull_di': (12.9, 0.16),
-    'grey_matter_di': (52.3,0.98),
-    'white_matter_di': (38.6, 0.6),
-    'frequency_arr': [1, 3], # frequency for top and bottom boundary
-
-    'skull_thickness': np.random.uniform(7, 8) / 2,
-    'skin_thickness': np.random.uniform(5, 7) / 2,
-    'head_width': np.random.uniform(142, 151) / 2,
-    'head_length': np.random.uniform(182, 200) / 2,
-}
-
-# Update fixed_parameters with dependent parameters
-fixed_parameters['ss_width'] = fixed_parameters['skull_thickness'] + fixed_parameters['skin_thickness'] * 2
-fixed_parameters['base_axes'] = (fixed_parameters['head_width'], fixed_parameters['head_length'])
-fixed_parameters['brain_ellipse_axes'] = ((fixed_parameters['head_width'] - fixed_parameters['ss_width']) * brain_gap_factor,
-                                          (fixed_parameters['head_length'] - fixed_parameters['ss_width']) * brain_gap_factor)
-fixed_parameters['brain_shift_factor'] = [np.random.uniform(brain_shift_factor, 1), np.random.uniform(brain_shift_factor, 1)]
-fixed_parameters['bottom_frequency'] = 3 #np.random.choice(fixed_parameters['frequency_arr'], p=[0.3, 0.7])
-fixed_parameters['bottom_amplitude'] = 0.05 #np.random.uniform(0.05, 0.15)
-fixed_parameters['top_frequency'] = 1 #np.random.choice(fixed_parameters['frequency_arr'], p=[0.7, 0.3])
-fixed_parameters['top_amplitude'] = 0.1# np.random.uniform(0.05, 0.15)
-# Ensure top_amplitude is within the bounds after being randomly chosen
-if fixed_parameters['top_frequency'] == 3:
-    fixed_parameters['top_amplitude'] = np.clip(fixed_parameters['top_amplitude'], 0.01, 0.05)
-
-# Generate the mask
-num_cases = 20000
-# write to h5
-stroke_per_h5 = root_path / f'data/stroke_per{fixed}.h5'
-if Path.is_file(stroke_per_h5):
-    os.remove(stroke_per_h5)   
-stroke_con_h5 = root_path / f'data/stroke_con{fixed}.h5'        
-if Path.is_file(stroke_con_h5):
-    os.remove(stroke_con_h5)   
-empty_per_h5 = root_path / f'data/empty_per{fixed}.h5'
-if Path.is_file(empty_per_h5):
-    os.remove(empty_per_h5) 
-empty_con_h5 = root_path / f'data/empty_con{fixed}.h5'
-if Path.is_file(empty_con_h5):
-    os.remove(empty_con_h5) 
-location_class_h5 = root_path / f'data/location_class{fixed}.h5'
-if Path.is_file(location_class_h5):
-    os.remove(location_class_h5)
-
-for i in trange(num_cases):
-    np.random.seed(i)  # Set seed for reproducibility
-    if if_random:
-        fixed_parameters['skull_thickness'] = np.random.uniform(7, 8) / 2
-        fixed_parameters['skin_thickness'] = np.random.uniform(5, 7) / 2
-        fixed_parameters['head_width'] = np.random.uniform(142, 151) / 2
-        fixed_parameters['head_length'] = np.random.uniform(182, 200) / 2
-        # Update fixed_parameters with dependent parameters
-        fixed_parameters['ss_width'] = fixed_parameters['skull_thickness'] + fixed_parameters['skin_thickness'] * 2
-        fixed_parameters['base_axes'] = (fixed_parameters['head_width'], fixed_parameters['head_length'])
-        fixed_parameters['fixed_ellipse_axes'] = (90, 105)
-        fixed_parameters['brain_ellipse_axes'] = ((fixed_parameters['head_width'] - fixed_parameters['ss_width']) * brain_gap_factor,
-                                                  (fixed_parameters['head_length'] - fixed_parameters['ss_width']) * brain_gap_factor)
-        fixed_parameters['brain_shift_factor'] = [np.random.uniform(brain_shift_factor, 1), np.random.uniform(brain_shift_factor, 1)]
-        # fixed_parameters[] = 
-        fixed_parameters['bottom_frequency'] = np.random.choice(fixed_parameters['frequency_arr'], p=[0.3, 0.7])
-        fixed_parameters['bottom_amplitude'] = np.random.uniform(0.05, 0.15)
-        fixed_parameters['top_frequency'] = np.random.choice(fixed_parameters['frequency_arr'], p=[0.7, 0.3])
-        fixed_parameters['top_amplitude'] = np.random.uniform(0.05, 0.15)
-        # Ensure top_amplitude is within the bounds after being randomly chosen
-        if fixed_parameters['top_frequency'] == 3:
-            fixed_parameters['top_amplitude'] = np.clip(fixed_parameters['top_amplitude'], 0.01, 0.05)
-            
-    #stroke parameters
-    stroke_parameters = {
-        'stroke_axes' : (np.random.randint(5, 18) , np.random.randint(5, 18)), 
-        'stroke_angle_range' : (0, 360), 
-        'stroke_type' : np.random.choice([0, 1], 1, p=[0.5, 0.5]), 
+if __name__ == '__main__':
+    if_random = False
+    if not if_random:
+        fixed = '_fixed' # ['', '_fixed']
+    else:
+        fixed = '_random'
+    
+    brain_gap_factor = 1 # this factor set to 1 means no grey between white matter and skull
+    brain_shift_factor = 1 # set to 1 means brain no shift within skull
+    shape_1_size, shape_0_size = 8, 8
+    # Step 1: Define independent parameters
+    fixed_parameters = {
+        'num_layers': 2,
+        'max_shift': [4 if if_random else 0 for i in range(1)][0],  # Maximum shift within the fixed ellipse
+        'angle_range': [(-3,3) if if_random else (0,0) for i in range(1)][0],
+        'shape': (512, 512),
+        'center': (256, 256),
+        'fixed_ellipse_axes': (90, 105),
+        'filled_liquid_di': (40, 0.1),
+        'scalp_di': (40.9,0.9),
+        'skull_di': (12.9, 0.16),
+        'grey_matter_di': (52.3,0.98),
+        'white_matter_di': (38.6, 0.6),
+        'frequency_arr': [1, 3], # frequency for top and bottom boundary
+    
+        'skull_thickness': np.random.uniform(7, 8) / 2,
+        'skin_thickness': np.random.uniform(5, 7) / 2,
+        'head_width': np.random.uniform(142, 151) / 2,
+        'head_length': np.random.uniform(182, 200) / 2,
     }
-    if stroke_parameters['stroke_type'] ==0:
-        stroke_type = 'ISC'
-    elif stroke_parameters['stroke_type'] ==1:
-        stroke_type = 'HAE'
-    exp_id = f'Exp{str(i).zfill(5)}_{stroke_type}{fixed}-head-v0'
-    exp_id_empty = f'Exp{str(i).zfill(5)}_empty{fixed}-head-v0'
-
-    # mask_per, mask_con, insert_stroke_region = create_layered_shape_with_fixed_ellipse(shape, center, base_axes,
-    #                                                fixed_ellipse_axes,
-    #                                                brain_ellipse_axes,
-    #                                                bottom_amplitude, bottom_frequency,
-    #                                                top_amplitude, top_frequency,
-    #                                                num_layers, max_shift, angle_range,
-    #                                                brain_shift_factor,
-    #                                                stroke_axes, stroke_angle_range, stroke_type)
-    mask_per, mask_con, empty_mask_per, empty_mask_con, boundary, stroke_location\
-        = create_layered_shape_with_fixed_ellipse(**fixed_parameters, **stroke_parameters)
     
-    if not if_random: 
-        assert fixed_parameters['top_frequency'] == 1
-        assert fixed_parameters['bottom_frequency'] == 3
-    #%% location class part
-    total_grids = make_grid(boundary, shape_1_size, shape_0_size)
-    # plot_full_grids(total_grids)
-    # note this class it grid location class
-    class_label = create_class_grids(stroke_location, total_grids, shape_1_size, shape_0_size)
-    class_label = class_label/class_label.sum()
-    # print(f'class_label 1st: {class_label.sum()}')
-    # grid_mask = plot_class_grids(total_grids, class_label, boundary, shape_1_size, shape_0_size)
-    # print(f'class_label after plot_class_grids: {class_label.sum()}')
-
-
+    # Update fixed_parameters with dependent parameters
+    fixed_parameters['ss_width'] = fixed_parameters['skull_thickness'] + fixed_parameters['skin_thickness'] * 2
+    fixed_parameters['base_axes'] = (fixed_parameters['head_width'], fixed_parameters['head_length'])
+    fixed_parameters['brain_ellipse_axes'] = ((fixed_parameters['head_width'] - fixed_parameters['ss_width']) * brain_gap_factor,
+                                              (fixed_parameters['head_length'] - fixed_parameters['ss_width']) * brain_gap_factor)
+    fixed_parameters['brain_shift_factor'] = [np.random.uniform(brain_shift_factor, 1), np.random.uniform(brain_shift_factor, 1)]
+    fixed_parameters['bottom_frequency'] = 3 #np.random.choice(fixed_parameters['frequency_arr'], p=[0.3, 0.7])
+    fixed_parameters['bottom_amplitude'] = 0.05 #np.random.uniform(0.05, 0.15)
+    fixed_parameters['top_frequency'] = 1 #np.random.choice(fixed_parameters['frequency_arr'], p=[0.7, 0.3])
+    fixed_parameters['top_amplitude'] = 0.1# np.random.uniform(0.05, 0.15)
+    # Ensure top_amplitude is within the bounds after being randomly chosen
+    if fixed_parameters['top_frequency'] == 3:
+        fixed_parameters['top_amplitude'] = np.clip(fixed_parameters['top_amplitude'], 0.01, 0.05)
+    
+    # Generate the mask
+    num_cases = 20000
+    # write to h5
+    stroke_per_h5 = root_path / f'data/stroke_per{fixed}.h5'
+    if Path.is_file(stroke_per_h5):
+        os.remove(stroke_per_h5)   
+    stroke_con_h5 = root_path / f'data/stroke_con{fixed}.h5'        
+    if Path.is_file(stroke_con_h5):
+        os.remove(stroke_con_h5)   
+    empty_per_h5 = root_path / f'data/empty_per{fixed}.h5'
+    if Path.is_file(empty_per_h5):
+        os.remove(empty_per_h5) 
+    empty_con_h5 = root_path / f'data/empty_con{fixed}.h5'
+    if Path.is_file(empty_con_h5):
+        os.remove(empty_con_h5) 
+    location_class_h5 = root_path / f'data/location_class{fixed}.h5'
+    if Path.is_file(location_class_h5):
+        os.remove(location_class_h5)
+    
+    for i in trange(num_cases):
+        np.random.seed(i)  # Set seed for reproducibility
+        if if_random:
+            fixed_parameters['skull_thickness'] = np.random.uniform(7, 8) / 2
+            fixed_parameters['skin_thickness'] = np.random.uniform(5, 7) / 2
+            fixed_parameters['head_width'] = np.random.uniform(142, 151) / 2
+            fixed_parameters['head_length'] = np.random.uniform(182, 200) / 2
+            # Update fixed_parameters with dependent parameters
+            fixed_parameters['ss_width'] = fixed_parameters['skull_thickness'] + fixed_parameters['skin_thickness'] * 2
+            fixed_parameters['base_axes'] = (fixed_parameters['head_width'], fixed_parameters['head_length'])
+            fixed_parameters['fixed_ellipse_axes'] = (90, 105)
+            fixed_parameters['brain_ellipse_axes'] = ((fixed_parameters['head_width'] - fixed_parameters['ss_width']) * brain_gap_factor,
+                                                      (fixed_parameters['head_length'] - fixed_parameters['ss_width']) * brain_gap_factor)
+            fixed_parameters['brain_shift_factor'] = [np.random.uniform(brain_shift_factor, 1), np.random.uniform(brain_shift_factor, 1)]
+            # fixed_parameters[] = 
+            fixed_parameters['bottom_frequency'] = np.random.choice(fixed_parameters['frequency_arr'], p=[0.3, 0.7])
+            fixed_parameters['bottom_amplitude'] = np.random.uniform(0.05, 0.15)
+            fixed_parameters['top_frequency'] = np.random.choice(fixed_parameters['frequency_arr'], p=[0.7, 0.3])
+            fixed_parameters['top_amplitude'] = np.random.uniform(0.05, 0.15)
+            # Ensure top_amplitude is within the bounds after being randomly chosen
+            if fixed_parameters['top_frequency'] == 3:
+                fixed_parameters['top_amplitude'] = np.clip(fixed_parameters['top_amplitude'], 0.01, 0.05)
+                
+        #stroke parameters
+        stroke_parameters = {
+            'stroke_axes' : (np.random.randint(5, 18) , np.random.randint(5, 18)), 
+            'stroke_angle_range' : (0, 360), 
+            'stroke_type' : np.random.choice([0, 1], 1, p=[0.5, 0.5]), 
+        }
+        if stroke_parameters['stroke_type'] ==0:
+            stroke_type = 'ISC'
+        elif stroke_parameters['stroke_type'] ==1:
+            stroke_type = 'HAE'
+        exp_id = f'Exp{str(i).zfill(5)}_{stroke_type}{fixed}-head-v0'
+        exp_id_empty = f'Exp{str(i).zfill(5)}_empty{fixed}-head-v0'
+    
+        # mask_per, mask_con, insert_stroke_region = create_layered_shape_with_fixed_ellipse(shape, center, base_axes,
+        #                                                fixed_ellipse_axes,
+        #                                                brain_ellipse_axes,
+        #                                                bottom_amplitude, bottom_frequency,
+        #                                                top_amplitude, top_frequency,
+        #                                                num_layers, max_shift, angle_range,
+        #                                                brain_shift_factor,
+        #                                                stroke_axes, stroke_angle_range, stroke_type)
+        mask_per, mask_con, empty_mask_per, empty_mask_con, boundary, stroke_location\
+            = create_layered_shape_with_fixed_ellipse(**fixed_parameters, **stroke_parameters)
         
-    write_to_h5(stroke_per_h5, stroke_con_h5, empty_per_h5, empty_con_h5,
-                    mask_per, mask_con, empty_mask_per, empty_mask_con,
-                    location_class_h5, class_label)
-    # save per
-    plt.imshow(mask_per, cmap='jet')
-    plt.colorbar()
-    plt.title(f'{stroke_type} brain permittivity')
-    plots_dir = './data/plots/permittivity'
-    if not os.path.exists(plots_dir):
-        os.makedirs(plots_dir)
-    plt.tight_layout()
-    plt.savefig(f'{plots_dir}/{exp_id}_per.png')
-    plt.close()
-    # save stroke location class
-    plot_bound_stroke(boundary, shape_1_size, shape_0_size, plots_dir, total_grids,
-                      class_label=class_label, stroke_location = stroke_location,
-                      if_save=True, exp_name=exp_id+'_stroke_label'
-                      )
-    # save con
-    plt.imshow(mask_con, cmap='jet')
-    plt.colorbar()
-    plt.title(f'{stroke_type} brain conductivity')
-    plots_dir = './data/plots/conductivity'
-    if not os.path.exists(plots_dir):
-        os.makedirs(plots_dir)
-    plt.tight_layout()
-    plt.savefig(f'{plots_dir}/{exp_id}_con.png')
-    plt.close()
+        if not if_random: 
+            assert fixed_parameters['top_frequency'] == 1
+            assert fixed_parameters['bottom_frequency'] == 3
+        #%% location class part
+        total_grids = make_grid(boundary, shape_1_size, shape_0_size)
+        # plot_full_grids(total_grids)
+        # note this class it grid location class
+        class_label = create_class_grids(stroke_location, total_grids, shape_1_size, shape_0_size)
+        class_label = class_label/class_label.sum()
+        # print(f'class_label 1st: {class_label.sum()}')
+        # grid_mask = plot_class_grids(total_grids, class_label, boundary, shape_1_size, shape_0_size)
+        # print(f'class_label after plot_class_grids: {class_label.sum()}')
     
-    # save empty per
-    plt.imshow(empty_mask_per, cmap='jet')
-    plt.colorbar()
-    plt.title('empty brain permittivity')
-    plots_dir = './data/plots/permittivity_empty'
-    if not os.path.exists(plots_dir):
-        os.makedirs(plots_dir)
-    plt.tight_layout()
-    plt.savefig(f'{plots_dir}/{exp_id}_emptyPer.png')
-    plt.close()
     
-    # save empty con
-    plt.imshow(empty_mask_con, cmap='jet')
-    plt.colorbar()
-    plt.title('empty brain conductivity')
-    plots_dir = './data/plots/conductivity_empty'
-    if not os.path.exists(plots_dir):
-        os.makedirs(plots_dir)
-    plt.tight_layout()
-    plt.savefig(f'{plots_dir}/{exp_id}_emptyCon.png')
-    plt.close()
+            
+        write_to_h5(stroke_per_h5, stroke_con_h5, empty_per_h5, empty_con_h5,
+                        mask_per, mask_con, empty_mask_per, empty_mask_con,
+                        location_class_h5, class_label)
+        # save per
+        plt.imshow(mask_per, cmap='jet')
+        plt.colorbar()
+        plt.title(f'{stroke_type} brain permittivity')
+        plots_dir = './data/plots/permittivity'
+        if not os.path.exists(plots_dir):
+            os.makedirs(plots_dir)
+        plt.tight_layout()
+        plt.savefig(f'{plots_dir}/{exp_id}_per.png')
+        plt.close()
+        # save stroke location class
+        plot_bound_stroke(boundary, shape_1_size, shape_0_size, plots_dir, total_grids,
+                          class_label=class_label, stroke_location = stroke_location,
+                          if_save=True, exp_name=exp_id+'_stroke_label'
+                          )
+        # save con
+        plt.imshow(mask_con, cmap='jet')
+        plt.colorbar()
+        plt.title(f'{stroke_type} brain conductivity')
+        plots_dir = './data/plots/conductivity'
+        if not os.path.exists(plots_dir):
+            os.makedirs(plots_dir)
+        plt.tight_layout()
+        plt.savefig(f'{plots_dir}/{exp_id}_con.png')
+        plt.close()
+        
+        # save empty per
+        plt.imshow(empty_mask_per, cmap='jet')
+        plt.colorbar()
+        plt.title('empty brain permittivity')
+        plots_dir = './data/plots/permittivity_empty'
+        if not os.path.exists(plots_dir):
+            os.makedirs(plots_dir)
+        plt.tight_layout()
+        plt.savefig(f'{plots_dir}/{exp_id}_emptyPer.png')
+        plt.close()
+        
+        # save empty con
+        plt.imshow(empty_mask_con, cmap='jet')
+        plt.colorbar()
+        plt.title('empty brain conductivity')
+        plots_dir = './data/plots/conductivity_empty'
+        if not os.path.exists(plots_dir):
+            os.makedirs(plots_dir)
+        plt.tight_layout()
+        plt.savefig(f'{plots_dir}/{exp_id}_emptyCon.png')
+        plt.close()
 
 
 # per_dict = {'random_eps': np.transpose(np.array(mask_per_list, dtype=np.float64),(1,2,0))}

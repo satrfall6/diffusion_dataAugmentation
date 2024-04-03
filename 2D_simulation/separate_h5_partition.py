@@ -16,7 +16,7 @@ os.chdir(Path(__file__).parents[0])
 root_path = Path.cwd()
 #%%
 # write to h5
-if_random = False
+if_random = True
 if not if_random:
     fixed = '_fixed' # ['', '_fixed']
 else:
@@ -29,7 +29,7 @@ stroke_con_path = root_path / f'data/stroke_con{fixed}.h5'
 empty_per_path = root_path / f'data/empty_per{fixed}.h5'
 
 empty_con_path = root_path / f'data/empty_con{fixed}.h5'
-
+ 
 num_partitions = 10
 num_cases = 20000
 cases_in_partition = int(num_cases / num_partitions) # divide into 10 partitions

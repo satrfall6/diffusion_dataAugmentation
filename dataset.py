@@ -26,7 +26,7 @@ class MinMaxChannelNormalization(nn.Module):
         max_vals = self.max_vals
 
 
-        x_normalized = (x  / max_vals + 1e-12)
+        x_normalized = (x + max_vals)  / (2 * max_vals) *2 -1
         return x_normalized
     
 class random_head_diffusion_loader(Dataset):
@@ -48,11 +48,13 @@ class random_head_diffusion_loader(Dataset):
             self.norm_values_tt, self.norm_values_tr = self._read_min_max(self.total_data, self.healthy_data)
 
         self.minMax_transform_tt = transforms.Compose([
-                                                    MinMaxChannelNormalization(self.norm_values_tt)
+                                                    MinMaxChannelNormalization(self.norm_values_tt),
+                                                    # transforms.Resize(32)
                                                     # Add other transformations here if needed
                                                 ])
         self.minMax_transform_tr = transforms.Compose([
-                                                    MinMaxChannelNormalization(self.norm_values_tr)
+                                                    MinMaxChannelNormalization(self.norm_values_tr),
+                                                    # transforms.Resize(32)
                                                     # Add other transformations here if needed
                                                 ])
         
@@ -95,6 +97,19 @@ class random_head_diffusion_loader(Dataset):
         with h5py.File(loc_label_path, 'r') as h5_file:
             loc_label = np.array(h5_file[key])
         return loc_label
+    def _get_type_label(self, key):
+        
+        '''
+        exmple of key : 'Exp07999_HAE_random-head-v0'
+        '''
+        stroke_type = key.split('_')[1]
+        if stroke_type == 'ISC':
+            type_label = 0
+        elif stroke_type == 'HAE':
+            type_label = 1
+        else: # might need no stroke or assertion for error detection
+            pass
+        return type_label
     
     def __getitem__(self, index):
         domain_total = self._get_item_from_files(self.total_data, index)
@@ -107,11 +122,13 @@ class random_head_diffusion_loader(Dataset):
             domain_healthy = self._get_item_from_files(self.healthy_data, random_healthy_idx)
 
         domain_healthy = torch.tensor(domain_healthy, dtype=torch.float32).view(-1,256).unsqueeze(0)
-        loc_label = self._get_loc_label(self.loc_label_path, self.total_data[index][1])
+        loc_label = self._get_loc_label(self.loc_label_path, self.total_data[index][1]) # 0 is path lf .h5
+        type_label = self._get_type_label(self.total_data[index][1]) # 0 is path lf .h5
+        
 
         return {'tr': self.minMax_transform_tr(domain_total-domain_healthy), 'tr_keys': self.total_data[index][1],
                 'tt': self.minMax_transform_tt(domain_total), 'tt_keys': self.total_data[index][1],
-                'loc_label': loc_label}
+                'loc_label': loc_label, 'type_label': type_label}
 
     def __len__(self):
         return len(self.total_data)

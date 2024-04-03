@@ -45,11 +45,11 @@ from generate_random_head import make_grid
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--project_goal', type=str, default='Diffusion_tr', help='Project name for wandb')
-parser.add_argument('--test_obj', type=str, default='type_location', help='name for separating wandb project')
+parser.add_argument('--test_obj', type=str, default='location_emb', help='name for separating wandb project')
 parser.add_argument('--n_epochs', type=int, default=180, help='number of epochs of training')
 parser.add_argument('--batchSize_train', type=int, default=10, help='size of the batches')
 parser.add_argument('--batchSize_test', type=int, default=4, help='size of the batches')
-parser.add_argument('--img_size', type=int, default=64, help='size of the batches')
+parser.add_argument('--img_size', type=int, default=256, help='size of the batches')
 
 parser.add_argument('--lr', type=float, default=0.00005, help='initial learning rate of G')
 
@@ -87,14 +87,13 @@ def check_results(generated_signals, loc_labels, norm, epoch, exp_id=None, save_
     for i, b in enumerate(range(generated_signals.shape[0])):
         if i >=4:
             break
-        
         generated_signal = generated_signals[b]
         loc_label = loc_labels[b]
         if generated_signal.shape[0] != 256:
             denormed_signal = interpolate_array(generated_signal.reshape(16,16,-1), 256)
             denormed_signal = torch.tensor(denormed_signal).view(256,-1).detach()
         else: 
-            denormed_signal = torch.tensor(generated_signal).clone().detach()
+            denormed_signal = generated_signal.clone().detach()
         denormed_signal = de_sym_norm(denormed_signal, norm)
         # denormed_signal = interpolate_array(denormed_signal.reshape(16,16,256), 1200)
         # confocal_result = DMAS_updated(denormed_signal.reshape(-1,1200), False)
@@ -147,7 +146,7 @@ def check_results(generated_signals, loc_labels, norm, epoch, exp_id=None, save_
         else:
             plt.show()
 #%% load dataset
-dataset_path = root_path / '2D_simulation/data'
+dataset_path = root_path / f'2D_simulation/data/data_{opt.img_size}'
 if_random = True
 
 if if_random:
@@ -165,7 +164,7 @@ if if_random:
                  and not 'stroke' in path.parts[-1]
                  and not 'per' in path.parts[-1]
                  and not 'con' in path.parts[-1]]
-    loc_label_path = dataset_path / 'location_class_random.h5'
+    loc_label_path = dataset_path.parent / 'location_class_random.h5'
 else:
     total_h5_paths = [path \
                  for path in list(Path(dataset_path).rglob("FDTD*fixed*.h5"))\
@@ -181,7 +180,7 @@ else:
                  and not 'stroke' in path.parts[-1]
                  and not 'per' in path.parts[-1]
                  and not 'con' in path.parts[-1]]
-    loc_label_path = dataset_path / 'location_class_fixed.h5'
+    loc_label_path = dataset_path.parent / 'location_class_fixed.h5'
 # Shuffle and split file paths
 shuffle_seed = 1253
 random.seed(shuffle_seed)
@@ -213,12 +212,12 @@ norm = train_dataset.norm_values_tr
 #%%
 # for batch in tqdm(train_loader):
 #     break
-# generated_signal = batch['tr'].squeeze(1)
+# generated_signals = batch['tr'].squeeze(1)
 # loc_label = batch['loc_label']
 # type_label = batch['type_label']
 
-# check_results(generated_signal, loc_label , norm)
-# plt.imshow(generated_signal[0,:,:].detach().cpu())
+# check_results(generated_signals, loc_label, 0, norm)
+# plt.imshow(generated_signals[0,:,:].detach().cpu())
 #%%
 num_classes = 103 # [loc: 103, type:2]
 model = Unet(

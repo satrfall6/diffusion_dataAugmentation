@@ -46,7 +46,7 @@ parser.add_argument('--test_obj', type=str, default='vanilla_diff_verify_signal'
 parser.add_argument('--n_epochs', type=int, default=180, help='number of epochs of training')
 parser.add_argument('--batchSize_train', type=int, default=12, help='size of the batches')
 parser.add_argument('--batchSize_test', type=int, default=4, help='size of the batches')
-parser.add_argument('--img_size', type=int, default=64, help='size of the batches')
+parser.add_argument('--img_size', type=int, default=256, help='size of the batches')
 
 parser.add_argument('--lr', type=float, default=0.00005, help='initial learning rate of G')
 
@@ -119,7 +119,7 @@ def check_results(generated_signals, norm, epoch, exp_id=None, save_dir=None):
         else:
             plt.show()
 #%% load dataset
-dataset_path = root_path / '2D_simulation/data'
+dataset_path = root_path / f'2D_simulation/data/data_{opt.img_size}'
 if_random = True
 
 if if_random:
@@ -137,7 +137,7 @@ if if_random:
                  and not 'stroke' in path.parts[-1]
                  and not 'per' in path.parts[-1]
                  and not 'con' in path.parts[-1]]
-    loc_label_path = dataset_path / 'location_class_random.h5'
+    loc_label_path = dataset_path.parent / 'location_class_random.h5'
 else:
     total_h5_paths = [path \
                  for path in list(Path(dataset_path).rglob("FDTD*fixed*.h5"))\
@@ -153,7 +153,7 @@ else:
                  and not 'stroke' in path.parts[-1]
                  and not 'per' in path.parts[-1]
                  and not 'con' in path.parts[-1]]
-    loc_label_path = dataset_path / 'location_class_fixed.h5'
+    loc_label_path = dataset_path.parent / 'location_class_fixed.h5'
 # Shuffle and split file paths
 shuffle_seed = 1253
 random.seed(shuffle_seed)

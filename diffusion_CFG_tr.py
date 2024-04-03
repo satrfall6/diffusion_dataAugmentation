@@ -4,6 +4,8 @@ Created on Tue Feb 20 11:40:32 2024
 
 @author: User
 """
+import sys
+
 import os 
 import random
 import numpy as np
@@ -14,67 +16,56 @@ from torchvision import datasets, transforms, utils
 from torch.utils.data import DataLoader
 # from denoising_diffusion_pytorch import Unet, GaussianDiffusion
 from denoising_diffusion_pytorch.classifier_free_guidance import Unet, GaussianDiffusion
+# from denoising_diffusion_pytorch.classifier_free_guidance_locEmbed import Unet, GaussianDiffusion
+
 import time
 import matplotlib.pyplot as plt
 import math
-from copy import deepcopy
+import cv2
 from pathlib import Path
 from fnmatch import fnmatch
+from tqdm import tqdm
+import wandb
+import argparse
 # root_path = Path(__file__).parents[0]
 os.chdir(Path(__file__).parents[0])
 root_path = Path.cwd()
+# Add the folder containing your module to the system path
+sys.path.append(str(root_path/'2D_simulation/CONFOCAL_IMAGING_LEI'))
+sys.path.append(str(root_path/'2D_simulation'))
+
 print('*'*30,f'Working in {root_path}','*'*30,)
 print(root_path)
 
 from dataset import random_head_diffusion_loader
+from confocal_imaging import DMAS_updated
+from verify_signal import interpolate_array
+from generate_random_head import make_grid
 
 
-model_techs_sub = '_cfg'
+parser = argparse.ArgumentParser()
+parser.add_argument('--project_goal', type=str, default='Diffusion_tr', help='Project name for wandb')
+parser.add_argument('--test_obj', type=str, default='type_location', help='name for separating wandb project')
+parser.add_argument('--n_epochs', type=int, default=180, help='number of epochs of training')
+parser.add_argument('--batchSize_train', type=int, default=10, help='size of the batches')
+parser.add_argument('--batchSize_test', type=int, default=4, help='size of the batches')
+parser.add_argument('--lr', type=float, default=0.00005, help='initial learning rate of G')
 
-def show_images(images, epoch):
-    
+opt = parser.parse_args()
+print(opt)
 
-    images_batch = images.detach().cpu().clone()
-    batch_size = images_batch.shape[0]
-    # Determine the grid size (rows x cols) for the subplot based on the batch size
-    cols = int(math.sqrt(batch_size))
-    rows = batch_size // cols + (batch_size % cols > 0)
-    
-    # Adjust cols and rows to fit the progression 2x2, 4x2, 4x4, 8x4, ...
-    if rows * cols < batch_size:  # In case of perfect square numbers
-        cols += 1
-    if cols > rows and rows * cols >= batch_size * 2:
-        # This adjustment helps maintain the grid's aspect ratio closer to square
-        cols = cols // 2
-        rows = rows * 2
-    
-    fig, axs = plt.subplots(rows, cols, figsize=(cols * 2.5, rows * 2.5))
-    axs = axs.flatten()  # Flatten the array of axes for easy indexing
+# initialize boundary for plotting
+shape_1_size, shape_0_size = 8, 8
+mask_con = np.zeros((512,512), dtype=np.float32)
+mask_for_fill = np.zeros_like(mask_con)
+# Draw fixed outer ellipse
+cv2.ellipse(mask_for_fill, (256,256), (90,105), 0, 0, 360, 2, -1)
+boundary = mask_for_fill.copy()
+boundary[boundary!=0] = 255
+boundary = cv2.resize(boundary, (256,256))
+total_grids = make_grid(boundary, shape_1_size, shape_0_size)
 
-    for i, img in enumerate(images_batch):
-        img = img
-        img = img.permute(1, 2, 0)  # Change from (C, H, W) to (H, W, C)
-        # img = img * torch.tensor([0.247, 0.243, 0.261]) + torch.tensor([0.4914, 0.4822, 0.4465])  # Unnormalize
-        img = (img + 1) / 2
-        img = img.clamp(0, 1)  # Ensure the image values are between 0 and 1
-        axs[i].imshow(img)
-        axs[i].axis('off')  # Hide the axes
 
-    # Hide any unused subplot areas
-    for i in range(len(images_batch), len(axs)):
-        axs[i].axis('off')
-
-    
-    save_dir = Path('./Plots/')
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
-    fname = save_dir/f'random_batch_epoch{model_techs_sub}_{epoch}.jpg'
-
-    # plt.imshow(superimposed_img)
-    fig.savefig(fname, bbox_inches='tight', pad_inches=0, dpi=150)
-    
-    # plt.tight_layout()
-    # plt.show()
 def save_loss(loss_list):
     
     # After training, plot the average loss per epoch
@@ -84,37 +75,110 @@ def save_loss(loss_list):
     plt.ylabel('Loss')
     plt.title('Training Loss Curve')
     plt.legend()
-    plt.savefig(f'training_loss_curve{model_techs_sub}.png')
+    plt.savefig(f'training_loss_curve{opt.test_obj}.png')
+    
+def de_sym_norm(generated_signals, norm):
+    return (generated_signals+1) / 2 * (2*norm) - norm
 
-
+def check_results(generated_signals, loc_labels, norm, epoch, exp_id=None, save_dir=None):
+    
+    for i, b in enumerate(range(generated_signals.shape[0])):
+        if i >=4:
+            break
+        
+        generated_signal = generated_signals[b]
+        loc_label = loc_labels[b]
+        if generated_signal.shape[0] != 256:
+            denormed_signal = interpolate_array(generated_signal.reshape(16,16,-1), 256)
+            denormed_signal = torch.tensor(denormed_signal).view(256,-1).detach()
+        else: 
+            denormed_signal = torch.tensor(generated_signal).clone().detach()
+        denormed_signal = de_sym_norm(denormed_signal, norm)
+        # denormed_signal = interpolate_array(denormed_signal.reshape(16,16,256), 1200)
+        # confocal_result = DMAS_updated(denormed_signal.reshape(-1,1200), False)
+        # print(denormed_signal.shape)
+        
+        confocal_result = DMAS_updated(denormed_signal, False)
+        
+        num_of_grids = total_grids.shape[1]
+        grid_mask = np.zeros_like(boundary)
+    
+        plot_threshold = 0.0
+        color_grid = 255
+        for g in range(num_of_grids):
+            if loc_label[g] > plot_threshold:
+                contours = np.array([[total_grids[0][g], total_grids[1][g]], 
+                                     [total_grids[0][g]+shape_0_size, total_grids[1][g]], 
+                                     [total_grids[0][g]+shape_0_size, total_grids[1][g]+shape_1_size], 
+                                     [total_grids[0][g], total_grids[1][g]+shape_1_size]])  
+                cv2.fillPoly(grid_mask, pts=[contours], color=int(color_grid * loc_label[g]))
+    
+        # Adjust grid_mask colors
+        grid_mask = grid_mask.astype('float32')
+        grid_mask[grid_mask == 0] = np.NaN
+        
+        # Create a figure with 2 subplots
+        fig, axes = plt.subplots(1, 3, figsize=(10, 5))  # Adjust figure size as needed
+    
+        # Plot grid_mask
+        axes[0].imshow(grid_mask, cmap='Blues_r')
+        sdataMask = np.copy(boundary).astype('float32')
+        sdataMask[boundary > 0] = np.NaN
+        axes[0].imshow(sdataMask, cmap='Greys_r')
+        axes[0].axis('off')
+        axes[0].set_title('Location label conditioned')
+    
+        # Plot confocal_result
+        axes[1].imshow(confocal_result, cmap='Spectral_r')  # Adjust colormap as needed
+        axes[1].axis('off')
+        axes[1].set_title('Confocal Result given condition')
+        
+        # Plot generated siganl
+        axes[2].imshow(generated_signal, cmap='gray')  # Adjust colormap as needed
+        axes[2].axis('off')
+        axes[2].set_title('generated signal')
+        
+        # Save the figure if needed
+        if save_dir is not None:
+            plt.savefig(save_dir / f'Epoch{epoch}_{exp_id[b]}.png')
+            plt.close()
+        else:
+            plt.show()
 #%% load dataset
 dataset_path = root_path / '2D_simulation/data'
 if_random = True
-from dataset import random_head_diffusion_loader
 
 if if_random:
     total_h5_paths = [path \
-                 for path in list(Path(dataset_path).rglob("*random*.h5"))\
+                 for path in list(Path(dataset_path).rglob("FDTD*random*.h5"))\
                  if fnmatch(path.parts[-1], '*stroke*')
-                 and not 'empty' in path.parts[-1]]
+                 and not 'empty' in path.parts[-1]
+                 and not 'per' in path.parts[-1]
+                 and not 'con' in path.parts[-1]]
                  
 
     healthy_h5_paths = [path \
-                 for path in list(Path(dataset_path).rglob("*random*.h5"))\
+                 for path in list(Path(dataset_path).rglob("FDTD*random*.h5"))\
                  if fnmatch(path.parts[-1], '*empty*')
-                 and not 'stroke' in path.parts[-1]]
+                 and not 'stroke' in path.parts[-1]
+                 and not 'per' in path.parts[-1]
+                 and not 'con' in path.parts[-1]]
     loc_label_path = dataset_path / 'location_class_random.h5'
 else:
     total_h5_paths = [path \
-                 for path in list(Path(dataset_path).rglob("*fixed*.h5"))\
+                 for path in list(Path(dataset_path).rglob("FDTD*fixed*.h5"))\
                  if fnmatch(path.parts[-1], '*stroke*')
-                 and not 'empty' in path.parts[-1]]
+                 and not 'empty' in path.parts[-1]
+                 and not 'per' in path.parts[-1]
+                 and not 'con' in path.parts[-1]]
                  
 
     healthy_h5_paths = [path \
-                 for path in list(Path(dataset_path).rglob("*fixed*.h5"))\
+                 for path in list(Path(dataset_path).rglob("FDTD*fixed*.h5"))\
                  if fnmatch(path.parts[-1], '*empty*')
-                 and not 'stroke' in path.parts[-1]]
+                 and not 'stroke' in path.parts[-1]
+                 and not 'per' in path.parts[-1]
+                 and not 'con' in path.parts[-1]]
     loc_label_path = dataset_path / 'location_class_fixed.h5'
 # Shuffle and split file paths
 shuffle_seed = 1253
@@ -122,7 +186,7 @@ random.seed(shuffle_seed)
 random.shuffle(total_h5_paths)
 random.seed(shuffle_seed)
 random.shuffle(healthy_h5_paths)
-#%%
+
 split_ratio = 0.7
 num_train= int(len(total_h5_paths) * split_ratio)
 
@@ -135,19 +199,29 @@ test_healthy_paths = healthy_h5_paths[num_train:]
 
 
 train_dataset = random_head_diffusion_loader(train_total_paths, train_healthy_paths, loc_label_path)
+# print(f'norm for tt is: {train_dataset.norm_values_tt}')
+# print(f'norm for tr is: {train_dataset.norm_values_tr}')
 test_dataset = random_head_diffusion_loader(test_total_paths, test_healthy_paths, loc_label_path,
                                             train_dataset.norm_values_tt, train_dataset.norm_values_tr)
-train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-test_loader = DataLoader(test_dataset, batch_size=1, shuffle=True)
-#%%
-
-for batch in train_loader:
-    break
+train_loader = DataLoader(train_dataset, batch_size=opt.batchSize_train, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=opt.batchSize_test, shuffle=False)
+# define norm array
+norm = train_dataset.norm_values_tr
 
 #%%
-num_classes = 10
+# for batch in tqdm(train_loader):
+#     break
+# generated_signal = batch['tr'].squeeze(1)
+# loc_label = batch['loc_label']
+# type_label = batch['type_label']
+
+# check_results(generated_signal, loc_label , norm)
+# plt.imshow(generated_signal[0,:,:].detach().cpu())
+#%%
+num_classes = 2 # [loc: 103, type:2]
 model = Unet(
     dim = 64,
+    channels = 1,
     dim_mults = (1, 2, 4, 8),
     num_classes = num_classes,
     cond_drop_prob = 0.5
@@ -155,55 +229,90 @@ model = Unet(
 
 diffusion = GaussianDiffusion(
     model,
-    image_size = 32,
+    image_size = 256,
     timesteps = 500    # number of steps
 ).cuda()
 
 #%%
-epochs = 180  # Define the number of epochs
-optimizer = optim.Adam(model.parameters(), lr=8e-5)
+wandb.init(project=f'{opt.project_goal}',
+            group=f'{opt.test_obj}', reinit = True, config=opt)
+# wandb.run.name = test_feature + '_' + test_model    
+wandb.run.name = f'{opt.project_goal}_{opt.test_obj}'
+optimizer = optim.Adam(model.parameters(), lr=opt.lr)
 epoch_loss_list = []  # Store average loss per epoch
-for epoch in range(epochs):
+for epoch in range(opt.n_epochs ):
+    #%%
     epoch_loss = 0.0
-    for batch_idx, (images, image_classes) in enumerate(train_loader):
-        images = images.cuda()
-        image_classes = image_classes.cuda()
+    for batch_idx, batch in enumerate(train_loader):
         
+        signals = batch['tr'].float().cuda()
+        # loc_label = batch['loc_label'].float().cuda()
+        type_label = batch['type_label'].cuda()
+
+        # loc_label = torch.sum(loc_label,1).to(torch.int)
+    #%%
         optimizer.zero_grad()
-        loss = diffusion(images, classes = image_classes)  # Forward pass and loss computation
+        # loss = diffusion(signals, classes = loc_label)  # Forward pass and loss computation
+        loss = diffusion(signals, classes = type_label)  # Forward pass and loss computation
+
         loss.backward()  # Backward pass
-        optimizer.step()  # Update model parameters
-        epoch_loss += loss.item()
-        if batch_idx % 250 == 0:  # Log every 100 batches
-            print(f'Epoch: {epoch}, Batch: {batch_idx}, Loss: {loss.item()}')
     
+        optimizer.step()  # Update model parameters
+
+        # Weight clipping
+        for p in model.parameters():
+            p.data.clamp_(-0.01, 0.01)  # Clipping the weights to the range [-0.01, 0.01]
+
+        
+        epoch_loss += loss.item()
+        if batch_idx % 500 == 0:  # Log every 100 batches
+            print(f'Epoch: {epoch}, Batch: {batch_idx}, Loss: {loss.item()}')
+    #    wandb.log({"Batch_idx": batch_idx, "batch_loss": loss
+    #               })
     # Calculate the average loss for the epoch
     avg_epoch_loss = epoch_loss / len(train_loader)
     epoch_loss_list.append(avg_epoch_loss)
+    wandb.log({"epoch": epoch, "loss": avg_epoch_loss
+                })
     print(f'Epoch: {epoch}, Average Loss: {avg_epoch_loss}')
     print('='*100)
     # Here you would save or display sampled_images, but remember they're on CUDA and need processing
+    #%%
     if epoch % 10 == 0:
         # Simple timing for one sampling operation - place this where you need it
         start_time = time.time()
-        class_to_sample = 5
-        sample_classes = torch.tensor([class_to_sample for i in range(16)]).cuda()
+
+
+        for batch in tqdm(test_loader):
+            # sample_classes = batch['loc_label'].float().cuda()
+            sample_classes = batch['type_label'].cuda()
+
+            exp_id = batch['tr_keys']
+            
+        # sample_classes = torch.randn([1,103]).cuda()
         sampled_images = diffusion.sample(
             classes = sample_classes,
             cond_scale = 6.                # condition scaling, anything greater than 1 strengthens the classifier free guidance. reportedly 3-8 is good empirically
-        )
+        ).detach().cpu().squeeze(1)
         end_time = time.time()  # Capture the end time after the function call
         # Calculate the duration
         duration = end_time - start_time
         print(f"Sampling 1000 steps took {duration} seconds.")
-        show_images(sampled_images, epoch+1)
-        final_weights_path = root_path / f'ckpts/test'
+        
+        # plot checking and save plots
+        plot_path = root_path / f'plots/{opt.test_obj}'
+        if not os.path.exists(plot_path):
+            os.makedirs(plot_path) 
+        check_results(sampled_images, sample_classes.detach().cpu(), norm, epoch,
+                      exp_id, save_dir=plot_path)
+
+        final_weights_path = root_path / f'ckpts/{opt.test_obj}'
         if not os.path.exists(final_weights_path):
             os.makedirs(final_weights_path)
         # if loss_G < best_loss:
             # lr_not_update_count = 0
             # best_loss = loss_G
-        torch.save(diffusion.state_dict(), final_weights_path/f'diffusion{model_techs_sub}.pth')
+        torch.save(diffusion.state_dict(), final_weights_path/f'diffusion{opt.test_obj}.pth')
 save_loss(epoch_loss_list)
 #%%
 # training_images = torch.rand(4, 3, 64, 64).cuda() # images are normalized from 0 to 1

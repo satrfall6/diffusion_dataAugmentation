@@ -217,7 +217,6 @@ norm = train_dataset.norm_values_tr
 # type_label = batch['type_label']
 
 # check_results(generated_signals, loc_label, 0, norm)
-# plt.imshow(generated_signals[0,:,:].detach().cpu())
 #%%
 num_classes = 103 # [loc: 103, type:2]
 model = Unet(

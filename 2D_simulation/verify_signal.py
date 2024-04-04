@@ -12,6 +12,7 @@ from scipy.io import loadmat, savemat
 import matplotlib.pyplot as plt
 from pathlib import Path
 from tqdm import trange
+import math
 os.chdir(Path(__file__).parents[0])
 root_path = Path.cwd()
 from scipy.interpolate import interp1d, UnivariateSpline
@@ -47,15 +48,50 @@ def interpolate_array(array, new_size):
 
     return new_array
 
+def reduce_ch_dimension(dim_reduce_to=64, if_sii=False):
+    s_array_idx = np.array([np.arange(16) for _ in range(16)])
+
+    i_plus_j = math.sqrt(dim_reduce_to)/2
+    assert i_plus_j % int(i_plus_j) ==0
+    i_plus_j = int(16 / i_plus_j / 2)
+
+    # i_plus_j = 4
+    if_sii = False
+    total_idx_to_select = i_plus_j*2 + 1
+
+    reduced_dim_idx = []
+    for a, ant in enumerate(s_array_idx):
+        # print(np.roll(np.roll(ant,-a),i_plus_j))
+        roll_ant = np.roll(np.roll(ant,-a),i_plus_j)
+        for sij in range(total_idx_to_select):
+            if not if_sii and sij == (i_plus_j):
+                continue
+            reduced_dim_idx.append((a, roll_ant[sij]))
+            
+    reduced_dim_idx = np.transpose(np.array(reduced_dim_idx))  
+    return reduced_dim_idx
+
+def zero_fill_to_16by16(reduced_array, reduced_idx, num_ants, td_len):
+    '''
+    reduced_array: shapes [64, td_len]
+    reduced_idx: (2, 64) using tuple for indexing 
+    '''
+    zero_filled_array = np.zeros([num_ants, num_ants, td_len])
+    
+    for ch in range(reduced_idx.shape[1]):
+        zero_filled_array[tuple(reduced_idx[:,ch])] = reduced_array[ch]
+    return zero_filled_array
+
 if __name__ == '__main__':
     num_partitions = 10
-    if_random = False
+    num_ants = 16
+    if_random = True
     if not if_random:
         fixed = '_fixed' # ['', '_fixed']
     else:
         fixed = '_random'
     
-    for par in range(4,num_partitions+1):
+    for par in range(0,num_partitions+1):
         FDTD_h5 = root_path / f'data/FDTD_stroke{fixed}_{par}.h5'
         if not if_random:
             FDTD_empty_h5 = root_path / f'data/FDTD_empty{fixed}.h5'
@@ -83,16 +119,37 @@ if __name__ == '__main__':
                 
         
                 fdtd_tr_signal = interpolate_array(fdtd_tr_signal, 1200)
-        
-                confocal_result = DMAS_updated(fdtd_tr_signal.reshape(256,-1), if_sii=True)
-                plt.imshow(confocal_result)
-                plt.title(fdtd_key+'_cofocal')
-                plots_dir = f'./data/plots/{fixed[1:]}_head/permittivity'
-                if not os.path.exists(plots_dir):
-                    os.makedirs(plots_dir)
+                
+                # test dimension reduction
+                reduced_dim_idx = reduce_ch_dimension()
+                fdtd_tr_signal_reduced = fdtd_tr_signal[tuple(reduced_dim_idx)] # [64, td]
+                # zero fill for confocal
+                fdtd_tr_signal_zeroFilled = zero_fill_to_16by16(fdtd_tr_signal_reduced, reduced_dim_idx,
+                                                      num_ants, fdtd_tr_signal.shape[-1])
+                
+                confocal_result_reduced = DMAS_updated(fdtd_tr_signal_zeroFilled.reshape(256,-1), if_sii=False)
+
+                confocal_result = DMAS_updated(fdtd_tr_signal.reshape(256,-1), if_sii=False)
+                
+                fig, axes = plt.subplots(1, 2, figsize=(10, 5))  # Adjust figure size as needed
+
+                axes[0].imshow(confocal_result, cmap='Spectral_r')  # Adjust colormap as needed
+                axes[0].axis('off')
+                axes[0].set_title('Confocal Result')
+                
+                axes[1].imshow(confocal_result_reduced, cmap='Spectral_r')  # Adjust colormap as needed
+                axes[1].axis('off')
+                axes[1].set_title('Confocal Result on reduced ch')
+                
+                # plt.imshow(confocal_result)
+                # plt.title(fdtd_key+'_cofocal')
+                # plots_dir = f'./data/plots/{fixed[1:]}_head/permittivity'
+                # if not os.path.exists(plots_dir):
+                #     os.makedirs(plots_dir)
                 plt.tight_layout()
-                plt.savefig(f'{plots_dir}/{fdtd_key}_cofocal.png')
-                plt.close()
+                plt.show()
+                # plt.savefig(f'{plots_dir}/{fdtd_key}_cofocal.png')
+                # plt.close()
                 #%% for showing signals ,tt, tr
                 # fdtd_signal = interpolate_array(np.array(FDTD[fdtd_key]),256).reshape(256,-1)
                 # fdtd_empty_signal = interpolate_array(np.array(FDTD_empty[fdtd_empty_key]),256).reshape(256,-1)

@@ -518,25 +518,29 @@ if __name__ == '__main__':
     
     # Generate the mask
     num_cases = 20000
+    case_already_have = 20000
+    num_in_partition = 2000
     # write to h5
-    stroke_per_h5 = root_path / f'data/stroke_per{fixed}.h5'
-    if Path.is_file(stroke_per_h5):
-        os.remove(stroke_per_h5)   
-    stroke_con_h5 = root_path / f'data/stroke_con{fixed}.h5'        
-    if Path.is_file(stroke_con_h5):
-        os.remove(stroke_con_h5)   
-    empty_per_h5 = root_path / f'data/empty_per{fixed}.h5'
-    if Path.is_file(empty_per_h5):
-        os.remove(empty_per_h5) 
-    empty_con_h5 = root_path / f'data/empty_con{fixed}.h5'
-    if Path.is_file(empty_con_h5):
-        os.remove(empty_con_h5) 
-    location_class_h5 = root_path / f'data/location_class{fixed}.h5'
-    if Path.is_file(location_class_h5):
-        os.remove(location_class_h5)
+
     
-    for i in trange(num_cases):
+    for i in trange(case_already_have, case_already_have+num_cases):
         np.random.seed(i)  # Set seed for reproducibility
+        partition = i // num_in_partition + 1
+
+        stroke_per_h5 = root_path / f'data/stroke_per{fixed}_{partition}.h5'
+        # if Path.is_file(stroke_per_h5):
+        #     os.remove(stroke_per_h5)   
+        stroke_con_h5 = root_path / f'data/stroke_con{fixed}_{partition}.h5'     
+        # if Path.is_file(stroke_con_h5):
+        #     os.remove(stroke_con_h5)   
+        empty_per_h5 = root_path / f'data/empty_per{fixed}_{partition}.h5'
+        # if Path.is_file(empty_per_h5):
+        #     os.remove(empty_per_h5) 
+        empty_con_h5 = root_path / f'data/empty_con{fixed}_{partition}.h5'
+        # if Path.is_file(empty_con_h5):
+        #     os.remove(empty_con_h5) 
+        location_class_h5 = root_path / f'data/location_class{fixed}.h5' # need to increment this one
+        
         if if_random:
             fixed_parameters['skull_thickness'] = np.random.uniform(7, 8) / 2
             fixed_parameters['skin_thickness'] = np.random.uniform(5, 7) / 2

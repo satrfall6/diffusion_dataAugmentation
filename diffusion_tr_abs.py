@@ -270,6 +270,7 @@ test_loader = DataLoader(test_dataset, batch_size=opt.batchSize_test, shuffle=Fa
 num_classes = 103
 model = Unet(
     dim = opt.in_dim,
+    resnet_block_groups = 4,
     channels = 1,
     dim_mults = (1, 2, 4, 8),
     flash_attn = False,
